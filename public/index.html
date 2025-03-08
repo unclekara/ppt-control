@@ -8,66 +8,59 @@
         body {
             font-family: Arial, sans-serif;
             text-align: center;
-            background-color: #f8f9fa;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
+            margin-top: 50px;
         }
-        .buttons {
+        .button-container {
             display: flex;
             justify-content: center;
-            gap: 15px;
-            background-color: #007bff;
-            padding: 15px;
-            border-radius: 10px;
+            gap: 20px;
         }
         button {
-            font-size: 22px;
             padding: 15px 30px;
-            background-color: white;
-            color: #007bff;
-            border: 2px solid #007bff;
-            border-radius: 10px;
+            font-size: 18px;
+            border: none;
             cursor: pointer;
-            font-weight: bold;
-            min-width: 150px;
-        }
-        button:hover {
+            border-radius: 10px;
             background-color: #007bff;
             color: white;
         }
-        h1 {
-            font-size: 24px;
+        .message {
             margin-top: 20px;
-        }
-        .status {
             font-size: 18px;
-            margin-top: 15px;
-            color: #28a745;
+            color: green;
         }
     </style>
 </head>
 <body>
+
     <h1>PowerPoint Remote Control</h1>
-    <div class="buttons">
+
+    <div class="button-container">
         <button onclick="sendCommand('PREV')">Назад</button>
         <button onclick="sendCommand('NEXT')">Вперёд</button>
     </div>
-    <p id="status" class="status"></p>
+
+    <p class="message" id="message"></p>
+
     <script>
-        function sendCommand(cmd) {
-            fetch(`/api/command?cmd=${cmd}`)
-                .then(response => response.text())
-                .then(data => {
-                    document.getElementById("status").innerText = `✅ ${data}`;
-                })
-                .catch(error => {
-                    console.error("❌ Ошибка!", error);
-                    document.getElementById("status").innerText = "❌ Ошибка!";
-                });
+        async function sendCommand(action) {
+            const messageElem = document.getElementById("message");
+            messageElem.innerText = "⏳ Отправка команды...";
+
+            try {
+                const response = await fetch(`/api/command?action=${action}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    messageElem.innerHTML = `✅`;
+                } else {
+                    messageElem.innerHTML = `❌`;
+                }
+            } catch (error) {
+                messageElem.innerHTML = "❌ Ошибка запроса!";
+            }
         }
     </script>
+
 </body>
 </html>
