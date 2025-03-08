@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки IP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            width: 200px;
+            text-align: center;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            cursor: pointer;
+        }
+        .save-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .save-btn:hover {
+            background-color: #218838;
+        }
+        .message {
+            margin-top: 15px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Настройки IP-адреса</h2>
+        <p>Текущий IP: <strong id="current-ip">Загрузка...</strong></p>
+        <input type="text" id="new-ip" placeholder="Введите IP-адрес">
+        <button class="save-btn" onclick="saveIP()">Сохранить</button>
+        <p class="message" id="message"></p>
+    </div>
+
+    <script>
+        async function loadCurrentIP() {
+            try {
+                console.log("🔄 Загружаем текущий IP...");
+                const response = await fetch("/api/get-settings");
+                const data = await response.json();
+                document.getElementById("current-ip").innerText = data.ip;
+                console.log(`✅ Текущий IP: ${data.ip}`);
+            } catch (error) {
+                document.getElementById("current-ip").innerText = "Ошибка загрузки!";
+            }
+        }
+
+        async function saveIP() {
+            const newIP = document.getElementById("new-ip").value;
+            const messageElem = document.getElementById("message");
+
+            if (!newIP) {
+                messageElem.innerText = "Введите корректный IP!";
+                return;
+            }
+
+            messageElem.innerText = "⏳ Сохранение...";
+
+            try {
+                console.log(`🚀 Отправляем новый IP: ${newIP}`);
+                const response = await fetch(`/api/set-ip?ip=${newIP}`);
+
+                if (!response.ok) {
+                    throw new Error("Ошибка сервера");
+                }
+
+                const data = await response.json();
+                if (data.success) {
+                    messageElem.innerText = "✅ IP сохранён!";
+                    console.log("✅ IP успешно обновлён!");
+                } else {
+                    messageElem.innerText = "❌ Ошибка сохранения!";
+                }
+
+                // Подождать 1 секунду и обновить IP на странице
+                setTimeout(loadCurrentIP, 1000);
+            } catch (error) {
+                messageElem.innerText = "❌ Ошибка запроса!";
+                console.error("Ошибка запроса:", error);
+            }
+        }
+
+        loadCurrentIP();
+    </script>
+
+</body>
+</html>

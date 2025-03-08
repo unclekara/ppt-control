@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PowerPoint Remote Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            background-color: #007bff;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        button {
+            font-size: 22px;
+            padding: 15px 30px;
+            background-color: white;
+            color: #007bff;
+            border: 2px solid #007bff;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            min-width: 150px;
+        }
+        button:hover {
+            background-color: #007bff;
+            color: white;
+        }
+        h1 {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+        .status {
+            font-size: 18px;
+            margin-top: 15px;
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <h1>PowerPoint Remote Control</h1>
+    <div class="buttons">
+        <button onclick="sendCommand('PREV')">Назад</button>
+        <button onclick="sendCommand('NEXT')">Вперёд</button>
+    </div>
+    <p id="status" class="status"></p>
+    <script>
+        function sendCommand(cmd) {
+            fetch(`/api/command?cmd=${cmd}`)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById("status").innerText = `✅ ${data}`;
+                })
+                .catch(error => {
+                    console.error("❌ Ошибка!", error);
+                    document.getElementById("status").innerText = "❌ Ошибка!";
+                });
+        }
+    </script>
+</body>
+</html>
