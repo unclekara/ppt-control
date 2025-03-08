@@ -2,3 +2,7 @@ node_modules/
 pm2.log
 config.json
 logs/
+Accept:
+GET
+Host:
+User-Agent:
