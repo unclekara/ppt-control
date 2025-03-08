@@ -42,7 +42,13 @@ echo "⚙️ Настраиваем Lighttpd..."
 
 LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
 
-# Заменяем server.document-root на правильный путь
+# Проверяем, установлен ли Lighttpd
+if ! command -v lighttpd &> /dev/null; then
+    echo "🛠 Устанавливаем Lighttpd..."
+    sudo apt install -y lighttpd
+fi
+
+# Устанавливаем корректный document-root
 sudo sed -i "s|server.document-root = .*|server.document-root = \"$INSTALL_DIR/public\"|" $LIGHTTPD_CONF
 
 # Проверяем, есть ли уже модуль proxy
