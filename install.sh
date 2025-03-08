@@ -1,57 +1,47 @@
 #!/bin/bash
 
-set -e  # Прерывать выполнение при ошибках
+set -e  # Прерывать скрипт при ошибке
 
-USER_NAME="pptcontrol"
-INSTALL_DIR="/home/$USER_NAME/ppt-control"
-GIT_REPO="https://github.com/your_username/your_project.git"
+echo "🚀 Установка ppt-control..."
 
-# 1. Проверяем, есть ли пользователь, если нет - создаем
-if id "$USER_NAME" &>/dev/null; then
-    echo "✅ Пользователь $USER_NAME уже существует."
-else
-    echo "👤 Создаём пользователя $USER_NAME..."
-    sudo useradd -m -s /bin/bash $USER_NAME
-    echo "✅ Пользователь $USER_NAME создан."
+# 1. Определяем текущего пользователя
+USER=$(whoami)
+INSTALL_DIR="/home/$USER/ppt-control"
+
+# 2. Обновляем систему
+echo "🔄 Обновление пакетов..."
+sudo apt update && sudo apt upgrade -y
+
+# 3. Устанавливаем необходимые зависимости
+echo "📦 Установка зависимостей..."
+sudo apt install -y git curl nodejs npm pm2
+
+# 4. Проверяем и устанавливаем Node.js (если версия ниже 16)
+NODE_VERSION=$(node -v 2>/dev/null || echo "none")
+if [[ "$NODE_VERSION" == "none" || "$NODE_VERSION" < "v16" ]]; then
+    echo "⚡ Обновление Node.js до версии 18..."
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt install -y nodejs
 fi
 
-# 2. Устанавливаем зависимости
-echo "🔧 Устанавливаем пакеты..."
-sudo apt update
-sudo apt install -y git nodejs npm lighttpd pm2
-
-# 3. Настраиваем папку проекта
-if [ -d "$INSTALL_DIR" ]; then
-    echo "📁 Папка $INSTALL_DIR уже существует."
-else
-    echo "📁 Создаём папку $INSTALL_DIR..."
-    sudo mkdir -p "$INSTALL_DIR"
-    sudo chown -R $USER_NAME:$USER_NAME "$INSTALL_DIR"
+# 5. Клонируем проект (если не был скачан)
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo "📥 Клонирование репозитория..."
+    git clone https://github.com/unclekara/ppt-control.git "$INSTALL_DIR"
 fi
 
-# 4. Клонируем проект с GitHub
-if [ -d "$INSTALL_DIR/.git" ]; then
-    echo "🔄 Обновляем репозиторий..."
-    sudo -u $USER_NAME git -C "$INSTALL_DIR" pull
-else
-    echo "📥 Клонируем репозиторий..."
-    sudo -u $USER_NAME git clone "$GIT_REPO" "$INSTALL_DIR"
-fi
-
-# 5. Устанавливаем зависимости Node.js
-echo "📦 Устанавливаем npm зависимости..."
 cd "$INSTALL_DIR"
-sudo -u $USER_NAME npm install
 
-# 6. Настраиваем автозапуск сервера с помощью pm2
-echo "🚀 Настраиваем pm2..."
-sudo -u $USER_NAME pm2 start "$INSTALL_DIR/server.js" --name ppt-server
-sudo -u $USER_NAME pm2 save
-sudo pm2 startup systemd -u $USER_NAME --hp /home/$USER_NAME
+# 6. Устанавливаем npm-зависимости
+echo "📦 Установка npm-зависимостей..."
+npm install
 
-# 7. Настраиваем Lighttpd
-echo "🌍 Настраиваем Lighttpd..."
-sudo cp "$INSTALL_DIR/lighttpd.conf" /etc/lighttpd/lighttpd.conf
-sudo systemctl restart lighttpd
+# 7. Настраиваем pm2 и автозапуск сервера
+echo "🚀 Настройка pm2..."
+pm2 stop ppt-server || true  # Остановка сервера, если запущен
+pm2 start server.js --name "ppt-server"
+pm2 save
+pm2 startup | grep "sudo" | bash  # Автоматически выполняем команду для автозапуска
 
-echo "🎉 Установка завершена!"
+echo "✅ Установка завершена! Сервер запущен."
+echo "💡 Открывай в браузере: http://<IP-сервера>"
