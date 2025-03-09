@@ -1,54 +1,38 @@
 #!/bin/bash
-
-set -e  # Останавливаем выполнение при ошибке
+set -e  # Останавливаем скрипт при ошибке
 
 echo "🚀 Начинаем установку ppt-control..."
 
-# Определяем текущего пользователя
-USER_HOME=$(eval echo ~$SUDO_USER)
-INSTALL_DIR="$USER_HOME/ppt-control"
+# 1️⃣ Обновление системы и установка базовых инструментов
+echo "⚙️ Обновляем систему и устанавливаем зависимости..."
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl git unzip
 
-# 1️⃣ Установка необходимых пакетов
-echo "📦 Устанавливаем зависимости..."
-sudo apt update && sudo apt install -y lighttpd git curl nodejs npm
+# 2️⃣ Удаление старых версий Node.js и PM2
+echo "🧹 Удаляем старые версии Node.js и PM2 (если есть)..."
+sudo apt remove -y nodejs npm || true
+sudo rm -rf ~/.nvm ~/.npm /usr/local/lib/node_modules
 
-# 2️⃣ Установка PM2 (если его нет)
-if ! command -v pm2 &> /dev/null; then
-    echo "⚙️ Устанавливаем PM2..."
-    sudo npm install -g pm2
-fi
+# 3️⃣ Установка актуальной версии Node.js и PM2
+echo "📥 Устанавливаем Node.js 18 и PM2..."
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+npm install -g pm2
 
-# 3️⃣ Клонирование репозитория
-if [ -d "$INSTALL_DIR" ]; then
-    echo "⚠️ Папка ppt-control уже существует! Удаляем..."
-    sudo rm -rf "$INSTALL_DIR"
-fi
+# Проверяем установленную версию
+echo "✅ Node.js версия: $(node -v)"
+echo "✅ NPM версия: $(npm -v)"
+echo "✅ PM2 версия: $(pm2 -v)"
 
-echo "📥 Клонируем ppt-control из GitHub..."
-git clone https://github.com/unclekara/ppt-control.git "$INSTALL_DIR"
-cd "$INSTALL_DIR"
-
-# 4️⃣ Установка зависимостей проекта
-echo "📦 Устанавливаем зависимости проекта..."
-npm install
-
-# 5️⃣ Настройка прав доступа
-echo "🔧 Настраиваем права доступа..."
-sudo chown -R www-data:www-data "$INSTALL_DIR/public"
-sudo chmod -R 755 "$INSTALL_DIR/public"
-
-# 6️⃣ Настройка Lighttpd
-echo "⚙️ Настраиваем Lighttpd..."
+# 4️⃣ Установка и настройка Lighttpd
+echo "⚙️ Устанавливаем и настраиваем Lighttpd..."
+sudo apt install -y lighttpd
+sudo systemctl enable --now lighttpd
 
 LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
 
-# Проверяем, установлен ли Lighttpd
-if ! command -v lighttpd &> /dev/null; then
-    echo "🛠 Устанавливаем Lighttpd..."
-    sudo apt install -y lighttpd
-fi
-
 # Устанавливаем корректный document-root
+INSTALL_DIR="/home/$(whoami)/ppt-control"
 sudo sed -i "s|server.document-root = .*|server.document-root = \"$INSTALL_DIR/public\"|" $LIGHTTPD_CONF
 
 # Проверяем, есть ли уже модуль proxy
@@ -63,8 +47,27 @@ echo 'proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) 
 echo "🔄 Перезапускаем Lighttpd..."
 sudo systemctl restart lighttpd
 
-# 7️⃣ Запуск сервера через PM2
-echo "🚀 Запускаем сервер..."
+# 5️⃣ Клонирование репозитория
+if [ -d "$INSTALL_DIR" ]; then
+    echo "⚠️ Папка ppt-control уже существует! Удаляем..."
+    sudo rm -rf "$INSTALL_DIR"
+fi
+
+echo "📥 Клонируем ppt-control из GitHub..."
+git clone https://github.com/unclekara/ppt-control.git "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+
+# 6️⃣ Установка зависимостей проекта
+echo "📦 Устанавливаем зависимости проекта..."
+npm install
+
+# 7️⃣ Настройка прав доступа
+echo "🔧 Настраиваем права доступа..."
+sudo chown -R www-data:www-data "$INSTALL_DIR/public"
+sudo chmod -R 755 "$INSTALL_DIR/public"
+
+# 8️⃣ Запуск сервера через PM2
+echo "🚀 Запускаем сервер через PM2..."
 pm2 start "$INSTALL_DIR/server.js" --name=ppt-server
 pm2 save
 pm2 startup
