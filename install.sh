@@ -4,73 +4,84 @@ set -e
 
 INSTALL_DIR="/home/$USER/ppt-control"
 
-echo "🚀 Начинаем установку ppt-control..."
+# ♻️ Очистка экрана
+clear
 
-# 1️⃣ Обновление системы и установка необходимых пакетов
-echo "⚙️ Обновляем систему и устанавливаем зависимости..."
+# ✨ Цвета для вывода
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Ὠ0 Приветствие
+echo -e "${GREEN}🚀 Начинаем установку ppt-control...${NC}"
+
+# ⚙️ Проверка и обновление ядра
+KERNEL_VERSION=$(uname -r | cut -d '-' -f1)
+echo -e "${GREEN}🔍 Текущая версия ядра: $KERNEL_VERSION${NC}"
+
+if [[ "$KERNEL_VERSION" < "5.15" ]]; then
+  echo -e "${GREEN}⬆️ Обновляем ядро...${NC}"
+  sudo apt update
+  sudo apt install --yes linux-generic
+fi
+
+# ♻️ Обновление системы
+echo -e "${GREEN}🔧 Обновляем систему...${NC}"
 sudo apt update && sudo apt upgrade -y
+
+# ⚙️ Установка зависимостей
+echo -e "${GREEN}🔧 Устанавливаем зависимости...${NC}"
 sudo apt install -y curl git build-essential lighttpd
 
-# 2️⃣ Установка Node.js 18 и npm
-echo "⬆️ Устанавливаем или обновляем Node.js..."
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
+# ⬆️ Установка/обновление Node.js 18
+if ! command -v node &> /dev/null || [[ $(node -v) != v18* ]]; then
+  echo -e "${GREEN}⬆️ Устанавливаем Node.js 18...${NC}"
+  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+  sudo apt install -y nodejs
+fi
 
-echo "✅ Node.js версия: $(node -v)"
-echo "✅ npm версия: $(npm -v)"
-
-# 3️⃣ Установка PM2
-echo "⚙️ Устанавливаем PM2..."
+# ⚙️ Установка PM2
+echo -e "${GREEN}⚙️ Устанавливаем PM2...${NC}"
 sudo npm install -g pm2
 
-# 4️⃣ Клонирование репозитория
+# Ὄ2 Клонирование проекта
 if [ -d "$INSTALL_DIR" ]; then
-    echo "⚠️ Папка ppt-control уже существует! Удаляем..."
-    sudo rm -rf "$INSTALL_DIR"
+  echo -e "${GREEN}⚠️ Папка ppt-control уже существует! Удаляем...${NC}"
+  sudo rm -rf "$INSTALL_DIR"
 fi
 
-echo "📥 Клонируем ppt-control из GitHub..."
+echo -e "${GREEN}📥 Клонируем ppt-control из GitHub...${NC}"
 git clone https://github.com/unclekara/ppt-control.git "$INSTALL_DIR"
-cd "$INSTALL_DIR"
 
-# 5️⃣ Установка зависимостей проекта
-echo "📦 Устанавливаем зависимости проекта..."
+# ὎6 Установка зависимостей проекта
+cd "$INSTALL_DIR"
+echo -e "${GREEN}📦 Устанавливаем зависимости проекта...${NC}"
 npm install
 
-# 6️⃣ Настройка прав доступа
-echo "🔧 Настраиваем права доступа..."
-sudo chown -R www-data:www-data "$INSTALL_DIR"
+# ⚖️ Права доступа
+echo -e "${GREEN}🔧 Настраиваем права доступа...${NC}"
+sudo chown -R www-data:www-data "$INSTALL_DIR/public"
 sudo chmod -R 755 "$INSTALL_DIR/public"
-sudo touch "$INSTALL_DIR/config.json"
-sudo chown www-data:www-data "$INSTALL_DIR/config.json"
+touch "$INSTALL_DIR/config.json"
+sudo chown $USER:$USER "$INSTALL_DIR/config.json"
 sudo chmod 664 "$INSTALL_DIR/config.json"
 
-# 7️⃣ Настройка Lighttpd
-echo "⚙️ Настраиваем Lighttpd..."
-
+# ⚖️ Настройка Lighttpd
 LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
-
-# Устанавливаем корректный document-root
-sudo sed -i "s|server.document-root *=.*|server.document-root = \"$INSTALL_DIR/public\"|" $LIGHTTPD_CONF
-
-# Включаем необходимые модули
-sudo lighty-enable-mod proxy
-sudo lighty-enable-mod redirect
-
-# Добавляем proxy настройку (если ещё не добавлена)
-if ! grep -q "proxy.server" "$LIGHTTPD_CONF"; then
-    echo 'proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )' | sudo tee -a "$LIGHTTPD_CONF" > /dev/null
-fi
-
-# Перезапуск Lighttpd
-echo "🔄 Перезапускаем Lighttpd..."
+echo -e "${GREEN}⚙️ Настраиваем Lighttpd...${NC}"
+sudo lighty-enable-mod proxy || true
+sudo sed -i "s|server.document-root = .*|server.document-root = \"$INSTALL_DIR/public\"|" $LIGHTTPD_CONF
+echo 'proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )' | sudo tee /etc/lighttpd/conf-available/99-ppt-proxy.conf > /dev/null
+sudo ln -sf /etc/lighttpd/conf-available/99-ppt-proxy.conf /etc/lighttpd/conf-enabled/99-ppt-proxy.conf
 sudo systemctl restart lighttpd
 
-# 8️⃣ Запуск сервера через PM2
-echo "🚀 Запускаем сервер через PM2..."
-pm2 start server.js --name=ppt-server
+# ⏰ Запуск сервера
+echo -e "${GREEN}🚀 Запускаем сервер...${NC}"
+pm run build || true
+pm run start || true
+pm2 start "$INSTALL_DIR/server.js" --name=ppt-server
 pm2 save
 pm2 startup | bash
 
-# 9️⃣ Финал
-echo "✅ Установка завершена! Открывай в браузере: http://$(hostname -I | awk '{print $1}')"
+# ✅ Завершено
+echo -e "${GREEN}✅ Установка завершена! Открой браузер: http://$(hostname -I | awk '{print $1}')${NC}"
+
