@@ -1,89 +1,97 @@
 #!/bin/bash
 set -e
 
-INSTALL_DIR="/home/$(whoami)/ppt-control"
-
 echo "🚀 Начинаем установку ppt-control..."
 
-# 🧠 Отключаем интерактивные окна needrestart
+# 📛 Отключаем интерактивность needrestart
 echo "⏹️ Отключаем needrestart интерактивность..."
-sudo sed -i 's/^#\$nrconf{restart} =.*/\$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf
+sudo sed -i 's/^#\$nrconf{restart} =.*/\$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf 2>/dev/null || true
 
-# 🧠 Проверка и обновление ядра
+# 🧬 Проверка и обновление ядра
 echo "🧬 Проверяем ядро..."
-CURRENT_KERNEL=$(uname -r | grep -oP '^\d+\.\d+\.\d+')
-AVAILABLE_KERNEL=$(apt-cache search linux-image | grep -Eo 'linux-image-[0-9]+\.[0-9]+\.[0-9]+-[a-z0-9]+' | sort -V | tail -1)
-
-if ! uname -r | grep -q "${AVAILABLE_KERNEL#linux-image-}"; then
-  echo "🆕 Обновляем ядро до $AVAILABLE_KERNEL"
-  sudo apt install -y "$AVAILABLE_KERNEL"
-  echo "🔁 Необходимо перезагрузить систему после установки, чтобы активировать новое ядро."
+CURRENT_KERNEL=$(uname -r | cut -d '-' -f1)
+REQUIRED_KERNEL="6.1"
+if dpkg --compare-versions "$CURRENT_KERNEL" lt "$REQUIRED_KERNEL"; then
+  echo "🆕 Обновляем ядро до linux-generic..."
+  sudo apt update
+  sudo apt install -y linux-generic
 else
-  echo "✅ Ядро уже актуально: $CURRENT_KERNEL"
+  echo "✅ Текущее ядро $CURRENT_KERNEL соответствует требованиям"
 fi
 
-# 🛠️ Установка необходимых пакетов
-echo "⚙️ Устанавливаем необходимые пакеты..."
+# 📦 Установка зависимостей
+echo "📦 Устанавливаем зависимости..."
 sudo apt update
-sudo apt install -y build-essential curl git lighttpd
+sudo apt install -y curl git build-essential lighttpd
 
-# ⬆️ Устанавливаем или обновляем Node.js
+# ⬆️ Установка Node.js 18 LTS
 echo "⬆️ Устанавливаем или обновляем Node.js..."
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt install -y nodejs
-echo "✅ Node.js версия: $(node -v)"
 
-# 📥 Клонируем ppt-control из GitHub
+# 🧠 Установка PM2
+echo "⚙️ Устанавливаем PM2..."
+sudo npm install -g pm2
+
+# 🏗 Определение пользователя и директории
+INSTALL_USER=${SUDO_USER:-$USER}
+INSTALL_HOME=$(eval echo "~$INSTALL_USER")
+INSTALL_DIR="$INSTALL_HOME/ppt-control"
+
+# 📥 Клонирование проекта
 if [ -d "$INSTALL_DIR" ]; then
-    echo "⚠️ Папка ppt-control уже существует! Удаляем..."
-    sudo rm -rf "$INSTALL_DIR"
+  echo "⚠️ Папка ppt-control уже существует! Удаляем..."
+  sudo rm -rf "$INSTALL_DIR"
 fi
-
 echo "📥 Клонируем ppt-control из GitHub..."
 git clone https://github.com/unclekara/ppt-control.git "$INSTALL_DIR"
 
-# 📦 Устанавливаем зависимости проекта
+# 📦 Установка зависимостей проекта
 cd "$INSTALL_DIR"
-echo "📦 Устанавливаем зависимости проекта..."
 npm install
 
-# 🔧 Настраиваем права доступа
+# 🔧 Настройка прав
 echo "🔧 Настраиваем права доступа..."
-sudo chown -R www-data:www-data "$INSTALL_DIR/public"
+sudo chown -R "$INSTALL_USER":"$INSTALL_USER" "$INSTALL_DIR"
 sudo chmod -R 755 "$INSTALL_DIR/public"
-[ -f "$INSTALL_DIR/config.json" ] && sudo chown $(whoami):$(whoami) "$INSTALL_DIR/config.json" && sudo chmod 664 "$INSTALL_DIR/config.json"
+sudo touch "$INSTALL_DIR/config.json"
+sudo chown "$INSTALL_USER":"$INSTALL_USER" "$INSTALL_DIR/config.json"
+sudo chmod 664 "$INSTALL_DIR/config.json"
 
-# ⚙️ Настраиваем Lighttpd
+# ⚙️ Настройка lighttpd
 echo "⚙️ Настраиваем Lighttpd..."
 LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
-sudo lighty-enable-mod proxy || true
 
-# Заменим document-root
-sudo sed -i "s|server.document-root *= *\"[^\"]*\"|server.document-root = \"$INSTALL_DIR/public\"|" "$LIGHTTPD_CONF"
+# Устанавливаем document-root
+sudo sed -i "s|server.document-root.*|server.document-root = \"$INSTALL_DIR/public\"|" "$LIGHTTPD_CONF"
 
-# Проверим, установлен ли нужный путь
-if grep -q "server.document-root = \"$INSTALL_DIR/public\"" "$LIGHTTPD_CONF"; then
-    echo "✅ Путь server.document-root корректно установлен."
-else
-    echo "❌ Не удалось установить server.document-root!" >&2
-    exit 1
+# Включаем модуль proxy, если ещё не включён
+if ! grep -q 'mod_proxy' "$LIGHTTPD_CONF"; then
+  echo 'server.modules += ( "mod_proxy" )' | sudo tee -a "$LIGHTTPD_CONF" > /dev/null
 fi
 
-# Добавим прокси на /api/, если ещё не добавлено
-if ! grep -q 'proxy.server = ( "/api/' "$LIGHTTPD_CONF"; then
-    echo 'proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )' | sudo tee -a "$LIGHTTPD_CONF" > /dev/null
-fi
+# Настраиваем проксирование API-запросов
+sudo tee -a "$LIGHTTPD_CONF" > /dev/null <<EOF
 
-# 🔄 Перезапускаем Lighttpd
-echo "🔄 Перезапускаем Lighttpd..."
+# ppt-control proxy
+proxy.server = (
+  "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) )
+)
+EOF
+
+# Проверка, что настройки применились
+echo "🔍 Проверка настроек lighttpd:"
+grep "server.document-root" "$LIGHTTPD_CONF"
+grep "mod_proxy" "$LIGHTTPD_CONF" || echo "⚠️ mod_proxy не найден в конфиге!"
+grep "proxy.server" "$LIGHTTPD_CONF" || echo "⚠️ proxy.server не найден в конфиге!"
+
+# 🔄 Перезапуск lighttpd
 sudo systemctl restart lighttpd
 
-# 🚀 Запускаем сервер через PM2
-echo "🚀 Устанавливаем PM2 и запускаем ppt-server..."
-sudo npm install -g pm2
+# 🚀 Запуск ppt-control
+echo "🚀 Запускаем сервер ppt-control через PM2..."
 pm2 start "$INSTALL_DIR/server.js" --name=ppt-server
 pm2 save
-pm2 startup | tail -n 1 | bash
+pm2 startup | grep sudo | bash
 
-# 📬 Финальное сообщение
 echo "✅ Установка завершена! Открой в браузере: http://$(hostname -I | awk '{print $1}')"
