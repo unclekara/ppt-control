@@ -2,83 +2,79 @@
 
 set -e
 
-INSTALL_DIR="/home/$USER/ppt-control"
+INSTALL_DIR="/home/$(logname)/ppt-control"
 
-print_step() {
-  echo -e "\n\033[1;36m$1\033[0m"
-}
+echo "🚀 Начинаем установку ppt-control..."
 
-print_step "🚀 Начинаем установку ppt-control..."
+# 1️⃣ Обновление системы
+echo "🔄 Обновляем систему..."
+sudo apt update -y
+sudo apt upgrade -y
 
-# 1. Обновление системы
-print_step "⚙️ Обновляем систему..."
-sudo apt update && sudo apt upgrade -y
-
-# 2. Установка зависимостей
-print_step "🔧 Устанавливаем необходимые пакеты..."
+# 2️⃣ Установка необходимых пакетов
+echo "📦 Устанавливаем необходимые пакеты..."
 sudo apt install -y curl git build-essential lighttpd
 
-# 3. Установка/обновление Node.js 18 LTS
-print_step "⬆️ Устанавливаем Node.js 18..."
-if ! node -v | grep -q 'v18'; then
-  curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-  sudo apt install -y nodejs
-fi
+# 3️⃣ Установка или обновление Node.js 18
+echo "⬆️ Устанавливаем или обновляем Node.js..."
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
 
 echo "✅ Node.js версия: $(node -v)"
+echo "✅ NPM версия: $(npm -v)"
 
-# 4. Установка PM2
-print_step "⚙️ Устанавливаем PM2..."
+# 4️⃣ Установка PM2
+echo "⚙️ Устанавливаем PM2..."
 sudo npm install -g pm2
 
-# 5. Клонирование проекта
-print_step "📥 Клонируем ppt-control из GitHub..."
+# 5️⃣ Клонирование репозитория
 if [ -d "$INSTALL_DIR" ]; then
-  echo "⚠️ Папка ppt-control уже существует! Удаляем..."
-  sudo rm -rf "$INSTALL_DIR"
+    echo "⚠️ Папка ppt-control уже существует! Удаляем..."
+    sudo rm -rf "$INSTALL_DIR"
 fi
 
+echo "📥 Клонируем ppt-control из GitHub..."
 git clone https://github.com/unclekara/ppt-control.git "$INSTALL_DIR"
+
 cd "$INSTALL_DIR"
 
-# 6. Установка зависимостей проекта
-print_step "📦 Устанавливаем зависимости проекта..."
+# 6️⃣ Установка зависимостей проекта
+echo "📦 Устанавливаем зависимости проекта..."
 npm install
 
-# 7. Настройка прав
-print_step "🔧 Настраиваем права доступа..."
-sudo chown -R www-data:www-data "$INSTALL_DIR/public"
-sudo chmod -R 755 "$INSTALL_DIR/public"
-sudo chown $USER:$USER "$INSTALL_DIR/config.json"
-sudo chmod 664 "$INSTALL_DIR/config.json"
-
-# 8. Настройка Lighttpd
-print_step "⚙️ Настраиваем Lighttpd..."
-LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
-sudo lighty-enable-mod proxy || true
-sudo lighty-enable-mod redirect || true
-
-# Меняем document-root
-sudo sed -i "s|server.document-root\s*=.*|server.document-root = \"$INSTALL_DIR/public\"|" "$LIGHTTPD_CONF"
-
-# Добавляем прокси
-if ! grep -q 'mod_proxy' "$LIGHTTPD_CONF"; then
-  echo 'server.modules += ( "mod_proxy" )' | sudo tee -a "$LIGHTTPD_CONF"
+# 7️⃣ Создание config.json, если его нет
+if [ ! -f "$INSTALL_DIR/config.json" ]; then
+    echo "⚙️ Создаём config.json по умолчанию..."
+    echo '{ "ip": "192.168.1.100" }' | sudo tee "$INSTALL_DIR/config.json" > /dev/null
 fi
 
-echo 'proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )' | sudo tee /etc/lighttpd/conf-available/90-ppt-api.conf > /dev/null
-sudo ln -sf /etc/lighttpd/conf-available/90-ppt-api.conf /etc/lighttpd/conf-enabled/90-ppt-api.conf
+# 8️⃣ Настройка прав доступа
+echo "🔧 Настраиваем права доступа..."
+sudo chown -R www-data:www-data "$INSTALL_DIR"
+sudo chmod -R 755 "$INSTALL_DIR/public"
+sudo chmod 664 "$INSTALL_DIR/config.json"
 
+# 9️⃣ Настройка Lighttpd
+echo "⚙️ Настраиваем Lighttpd..."
+sudo lighty-enable-mod proxy
+sudo lighty-enable-mod redirect 2>/dev/null || true
+
+sudo sed -i "s|server.document-root = .*|server.document-root = \"$INSTALL_DIR/public\"|" /etc/lighttpd/lighttpd.conf
+
+sudo bash -c "cat >> /etc/lighttpd/lighttpd.conf" <<EOL
+
+# API proxy config
+proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )
+EOL
+
+echo "🔄 Перезапускаем Lighttpd..."
 sudo systemctl restart lighttpd
 
-# 9. Запуск через PM2
-print_step "🚀 Запускаем сервер..."
+# 🔟 Запуск ppt-server через PM2
+echo "🚀 Запускаем ppt-server через PM2..."
 pm2 start "$INSTALL_DIR/server.js" --name=ppt-server
 pm2 save
+pm2 startup | grep sudo | bash
 
-# 10. Автозапуск PM2
-print_step "🔁 Настраиваем автозапуск PM2..."
-STARTUP_CMD=$(pm2 startup systemd -u $USER --hp $HOME | grep sudo)
-eval "$STARTUP_CMD"
-
-print_step "✅ Установка завершена! Открывай в браузере: http://$(hostname -I | awk '{print $1}')"
+echo "✅ Установка завершена!"
+echo "🌐 Открой в браузере: http://$(hostname -I | awk '{print $1}')"
