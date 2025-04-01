@@ -1,23 +1,23 @@
 #!/bin/bash
-
 set -e
 
 INSTALL_DIR="/home/$USER/ppt-control"
 CONFIG_FILE="$INSTALL_DIR/config.json"
 PUBLIC_DIR="$INSTALL_DIR/public"
+LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
 
 echo "🚀 Начинаем установку ppt-control..."
 
-# Отключаем интерактивные окна needrestart
+# Отключаем интерактивность needrestart
 echo "⏹️ Отключаем needrestart интерактивность..."
 sudo sed -i 's/^#\$nrconf{restart}.*/\$nrconf{restart} = "a";/' /etc/needrestart/needrestart.conf || true
 
-# Устанавливаем необходимые пакеты
-echo "🧰 Устанавливаем зависимости (curl, git, lighttpd)..."
+# Обновляем систему и ставим базовые пакеты
+echo "🧰 Обновляем систему и устанавливаем зависимости..."
 sudo apt update
-sudo apt install -y curl git lighttpd build-essential
+sudo apt install -y curl git build-essential lighttpd
 
-# Устанавливаем Node.js LTS 18 (если нет или старая)
+# Устанавливаем или обновляем Node.js до версии 18
 REQUIRED_NODE_MAJOR=18
 NODE_VERSION=$(node -v 2>/dev/null || echo "v0.0.0")
 NODE_MAJOR=$(echo "$NODE_VERSION" | grep -oP '\d+' | head -1)
@@ -50,33 +50,34 @@ echo "📦 Устанавливаем зависимости проекта..."
 cd "$INSTALL_DIR"
 npm install
 
-# Создаём config.json, если его нет
+# Создаём config.json, если отсутствует
 if [ ! -f "$CONFIG_FILE" ]; then
   echo "⚙️ Создаём config.json..."
   echo '{ "ip": "" }' | sudo tee "$CONFIG_FILE" > /dev/null
 fi
 
-# Устанавливаем правильные права доступа
+# Настройка прав
 echo "🔧 Настраиваем права доступа..."
 sudo chown -R www-data:www-data "$INSTALL_DIR"
 sudo chmod -R 755 "$PUBLIC_DIR"
 sudo chown "$USER":"$USER" "$CONFIG_FILE"
 sudo chmod 664 "$CONFIG_FILE"
 
-# Настраиваем Lighttpd
+# Настройка Lighttpd
 echo "⚙️ Настраиваем Lighttpd..."
 sudo lighty-enable-mod proxy || true
 sudo lighty-enable-mod redirect || true
 
-LIGHTTPD_CONF="/etc/lighttpd/lighttpd.conf"
-sudo sed -i "s|server.document-root = .*|server.document-root = \"$PUBLIC_DIR\"|" "$LIGHTTPD_CONF"
+# Обновляем document-root
+sudo sed -i "s|^server.document-root *=.*|server.document-root = \"$PUBLIC_DIR\"|" "$LIGHTTPD_CONF"
 
-# Добавляем проксирование API
+# Удостоверимся, что правило proxy.server есть
 if ! grep -q 'proxy.server' "$LIGHTTPD_CONF"; then
   echo 'proxy.server = ( "/api/" => ( ( "host" => "127.0.0.1", "port" => 3000 ) ) )' | sudo tee -a "$LIGHTTPD_CONF" > /dev/null
 fi
 
-# Перезапускаем Lighttpd
+# Проверим корректность и перезапустим lighttpd
+sudo lighttpd -t -f "$LIGHTTPD_CONF"
 echo "🔄 Перезапускаем Lighttpd..."
 sudo systemctl restart lighttpd
 
@@ -86,17 +87,8 @@ pm2 start "$INSTALL_DIR/server.js" --name=ppt-server
 pm2 save
 pm2 startup | grep sudo | sed 's/^/sudo /' | bash
 
-# ⏹️ Финальная проверка config.json и прав доступа
-echo "🔎 Проверка и корректировка прав в конце установки..."
+# Повторно проверяем config.json
+echo "📄 Проверка config.json и прав:"
+ls -l "$CONFIG_FILE"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo "⚠️ config.json не найден, создаём заново..."
-  echo '{ "ip": "" }' | sudo tee "$CONFIG_FILE" > /dev/null
-fi
-
-sudo chown "$USER":"$USER" "$CONFIG_FILE"
-sudo chmod 664 "$CONFIG_FILE"
-sudo chown -R www-data:www-data "$PUBLIC_DIR"
-sudo chmod -R 755 "$PUBLIC_DIR"
-
-echo "✅ Установка завершена! Открой http://$(hostname -I | awk '{print $1}') в браузере"
+echo "✅ Установка завершена! Открой в браузере: http://$(hostname -I | awk '{print $1}')"
