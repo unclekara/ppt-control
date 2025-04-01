@@ -86,4 +86,17 @@ pm2 start "$INSTALL_DIR/server.js" --name=ppt-server
 pm2 save
 pm2 startup | grep sudo | sed 's/^/sudo /' | bash
 
+# ⏹️ Финальная проверка config.json и прав доступа
+echo "🔎 Проверка и корректировка прав в конце установки..."
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "⚠️ config.json не найден, создаём заново..."
+  echo '{ "ip": "" }' | sudo tee "$CONFIG_FILE" > /dev/null
+fi
+
+sudo chown "$USER":"$USER" "$CONFIG_FILE"
+sudo chmod 664 "$CONFIG_FILE"
+sudo chown -R www-data:www-data "$PUBLIC_DIR"
+sudo chmod -R 755 "$PUBLIC_DIR"
+
 echo "✅ Установка завершена! Открой http://$(hostname -I | awk '{print $1}') в браузере"
