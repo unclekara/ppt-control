@@ -22,6 +22,7 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/unclekara/ppt-contr
 ## После установки
 
 - Приложение будет доступно по адресу: `http://<IP-сервера>`
+- Страница настройки находится по адресу: `http://<IP-сервера>/settings.html`
 - Конфигурация хранится в `config.json` внутри проекта
 - Сервер запускается автоматически через PM2
 
