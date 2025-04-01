@@ -26,6 +26,8 @@ sudo ./install.sh
 ```
 http://<IP_СЕРВЕРА>
 ```
+Страница настройки IP адреса компьютера с PowerPoint находится по адресу:
+http://<IP_СЕРВЕРА>/settings.html
 
 ---
 
