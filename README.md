@@ -14,7 +14,10 @@
 ## Установка
 
 ```bash
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/unclekara/ppt-control/main/install.sh)"
+sudo wget https://raw.githubusercontent.com/unclekara/ppt-control/main/install.sh
+sudo chmod +x install.sh
+sudo ./install.sh
+
 ```
 
 > ❗ Перед установкой убедись, что система обновлена и перезагружена.
